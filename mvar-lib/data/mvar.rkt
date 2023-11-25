@@ -282,8 +282,6 @@
      (define get-ctc (mvar-contract-get-ctc self))
      (define get-proc (if get-ctc (get/build-late-neg-projection get-ctc) put-proc))
      (λ (blame)
-       (define (add-context blame swap?)
-         (blame-add-context blame "the content of" #:swap? swap?))
        (build-pos/neg-val-projection
         (λ () (get-proc (blame-add-context blame "a value read from")))
         (λ () (put-proc (blame-add-context blame "a value written to" #:swap? #t)))

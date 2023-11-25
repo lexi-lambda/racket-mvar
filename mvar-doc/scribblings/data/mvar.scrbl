@@ -31,11 +31,11 @@
 
 @margin-note{M-vars originate in Haskell, where they are known as @code{MVar}s. This library is based on the @hyperlink["https://hackage.haskell.org/package/base-4.19.0.0/docs/Control-Concurrent-MVar.html"]{modern API provided by GHC}, which differs in some details from their original presentation in @citet[concurrent-haskell]. Most notably, @racket[mvar-put!] on a full M-var blocks (instead of raising an exception), and @racket[mvar-peek] is atomic.}
                  
-An @deftech{M-var} is a mutable data structure useful in concurrent programs. Like a @reftech{box}, an M-var is a mutable reference cell that can hold a single value. Unlike a box, an M-var can also be @deftech{empty}, holding no value at all. When a value is placed into an empty M-var using @racket[mvar-put!], the M-var becomes @deftech{full}, and it remains full until the value is removed using @racket[mvar-take!]. If a thread attempts to put a value into an M-var that is already full, the thread waits until the M-var is emptied. Dually, if a thread attempts to take a value from an M-var that is currently empty, it waits until the M-var is filled.
+An @deftech{M-var} is a mutable data structure useful in concurrent programs. Like a @reftech{box}, an M-var is a mutable reference cell that can hold a single value. Unlike a box, an M-var can also be @deftech{empty}, holding no value at all. When a value is placed into an empty M-var using @racket[mvar-put!], the M-var becomes @deftech{full}, and it remains full until the value is removed using @racket[mvar-take!]. If a thread attempts to put a value into an M-var that is already full, the thread waits until the M-var is emptied. Conversely, if a thread attempts to take a value from an M-var that is currently empty, it waits until the M-var is filled.
 
 It is also possible to atomically read the contents of a full M-var without removing its value using @racket[mvar-peek]. Like @racket[mvar-take!], using @racket[mvar-peek] on an empty M-var waits until it is filled. Each operation also comes in a polling variant: @racket[mvar-try-put!], @racket[mvar-try-take!], and @racket[mvar-try-peek] always return immediately and simply fail instead of blocking. For maximum flexibility, M-vars can also be combined with other @reftech{synchronizable events} using @racket[mvar-put!-evt], @racket[mvar-take!-evt], and @racket[mvar-peek-evt].
 
-The blocking behavior of M-var operations makes it a remarkably flexible building block in concurrent programs, as it is effectively a combination of a @reftech{box}, a @reftech{semaphore}, and a @reftech{channel}. Even just a single M-var can be used in many different ways:
+The blocking behavior of the M-var operations makes M-vars a remarkably flexible building block in concurrent programs, as they are effectively a @reftech{box}, @reftech{semaphore}, and @reftech{channel} rolled into one. Even just a single M-var can be used in numerous ways:
 @;
 @itemlist[
  @item{If separate processes are tasked with filling and emptying an M-var, it behaves like an @reftech{asynchronous channel} with a buffer size of 1. Producers use @racket[mvar-put!] to send a value, and consumers use @racket[mvar-take!] to receive a value.}
@@ -154,7 +154,7 @@ Returns a @reftech{synchronizable event} for use with @racket[sync]. The event i
 
 Like @racket[mvar-empty?], this operation should be used very carefully: even if the event is selected, another thread might fill @racket[mv] the instant that @racket[sync] returns, so it is almost always better to use @racket[mvar-put!-evt], instead. However, in programs where @racket[mv] only has a single writer, it can rarely be useful, so it is provided for completeness.}
 
-@section{Contracts}
+@section[#:tag "contracts"]{Contracts}
 
 @defproc[(mvar/c [in-ctc contract?] [out-ctc contract? in-ctc]) contract?]{
 Returns a @reftech{contract} that recognizes @tech{M-vars}. Values written to the M-var must match @racket[in-ctc], and values read from the M-var must match @racket[out-ctc]. Usually, @racket[in-ctc] and @racket[out-ctc] are the same (which is the default if @racket[out-ctc] is not provided), but supplying @racket[none/c] for one of the arguments can be useful to restrict the client of the contract to reading from or writing to the M-var.
@@ -165,7 +165,7 @@ If @racket[in-ctc] and @racket[out-ctc] are both @reftech{chaperone contracts}, 
   (define/contract mv (mvar/c exact-integer?) (make-mvar))
   (eval:error (mvar-put! mv 'not-an-integer)))}
 
-@section{Chaperones and Impersonators}
+@section[#:tag "chaperones-and-impersonators"]{Chaperones and Impersonators}
 
 @defproc[(impersonate-mvar [mv mvar?]
                            [#:get get-proc (or/c (-> any/c any/c) #f) #f]
@@ -188,5 +188,22 @@ Pairs of @racket[prop] and @racket[prop-val] (the number of by-position argument
                          ... ...)
          mvar?]{
 Like @racket[impersonate-mvar], but produces a @reftech{chaperone} of @racket[mv], and the @racket[get-proc] and @racket[put-proc] procedures must return chaperones of their arguments.}
+
+@section[#:tag "versus-syncvar"]{Comparison with @racketmodname[syncvar #:indirect]}
+
+The @racketmodname[syncvar/mvar #:indirect] library predates @racketmodname[data/mvar] and also provides an implementation of @tech{M-vars}. The libraries are quite similar, but @racketmodname[data/mvar] provides several additional features:
+@;
+@itemlist[
+ @item{In @racketmodname[data/mvar], @racket[mvar-put!] blocks when applied to an M-var that is already @tech{full}; in @racketmodname[syncvar/mvar #:indirect], it raises an error. (The error-raising behavior appeared in the original design@~cite[concurrent-haskell], but the blocking behavior turned out to be significantly more useful.)}
+
+ @item{@racketmodname[data/mvar] provides @seclink["contracts"]{contracts}, @seclink["chaperones-and-impersonators"]{chaperones, and impersonators} on M-vars, while @racketmodname[syncvar/mvar #:indirect] does not.}
+
+ @item{In @racketmodname[data/mvar], @racket[mvar-put!], @racket[mvar-take!], and @racket[mvar-peek] accept an @racket[#:enable-breaks?] keyword argument to allow @reftech{breaks} to be delivered while blocked even if they are disabled in the enclosing context. @racketmodname[syncvar/mvar #:indirect] does not, though @racket[sync/enable-break] can be used as an alternative.}
+
+ @item{@racketmodname[data/mvar] provides stronger guarantees for @racket[mvar-peek] (see @secref["ordering-and-fairness"]).}
+
+ @item{@racketmodname[data/mvar] provides the @racket[mvar-empty?] and @racket[mvar-empty-evt] operations (though they are of admittedly limited usefulness).}]
+@;
+For most users, the first two bullets in the above list will likely be the only ones that matter.
 
 @generate-bibliography[]

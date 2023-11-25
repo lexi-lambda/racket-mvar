@@ -35,7 +35,7 @@ An @deftech{M-var} is a mutable data structure useful in concurrent programs. Li
 
 It is also possible to atomically read the contents of a full M-var without removing its value using @racket[mvar-peek]. Like @racket[mvar-take!], using @racket[mvar-peek] on an empty M-var waits until it is filled. Each operation also comes in a polling variant: @racket[mvar-try-put!], @racket[mvar-try-take!], and @racket[mvar-try-peek] always return immediately and simply fail instead of blocking. For maximum flexibility, M-vars can also be combined with other @reftech{synchronizable events} using @racket[mvar-put!-evt], @racket[mvar-take!-evt], and @racket[mvar-peek-evt].
 
-The blocking behavior of the M-var operations makes M-vars a remarkably flexible building block in concurrent programs, as they are effectively a @reftech{box}, @reftech{semaphore}, and @reftech{channel} rolled into one. Even just a single M-var can be used in numerous ways:
+The blocking behavior of the M-var operations makes M-vars a remarkably flexible building block in concurrent programs, as they are effectively a @reftech{box}, @reftech{semaphore}, and @reftech{channel} rolled into one. Even a single M-var can serve numerous functions:
 @;
 @itemlist[
  @item{If separate processes are tasked with filling and emptying an M-var, it behaves like an @reftech{asynchronous channel} with a buffer size of 1. Producers use @racket[mvar-put!] to send a value, and consumers use @racket[mvar-take!] to receive a value.}
@@ -48,11 +48,21 @@ The blocking behavior of the M-var operations makes M-vars a remarkably flexible
 @;
 This list is far from exhaustive, and multiple M-vars used in concert can be even more flexible.}
 
-@section[#:tag "ordering-and-fairness"]{Ordering and Fairness}
+@section[#:tag "guarantees"]{Guarantees}
 
-@tech{M-var} synchronization is @deftech{fair}: if a thread is blocked on an M-var operation, and opportunities for the operation to complete occur infinitely often, the operation is guaranteed to eventually complete.
+@subsection[#:tag "ordering-and-fairness"]{Ordering and Fairness}
 
-Additionally, if a thread is blocked on a call to @racket[mvar-peek], the call is guaranteed to complete the next time the M-var is @tech[#:key "full"]{filled}, even if another thread is blocked on a call to @racket[mvar-take!] on the same M-var. In other words, whenever @racket[mvar-peek] and @racket[mvar-take!] compete to read the next value of an @tech{empty} M-var, @racket[mvar-peek] always “wins”. Since @racket[mvar-peek] is not exclusive—that is, it does not preclude another thread from reading the same M-var after it completes—this preference for @racket[mvar-peek] ensures that the maximum number of threads are woken up each time an M-var is filled.
+@tech{M-var} synchronization is @deftech{fair}: if a thread is blocked on an M-var operation, and opportunities for the operation to complete occur infinitely often, the operation is guaranteed to eventually complete. However, the precise order in which threads blocked on a call to @racket[mvar-put!] or @racket[mvar-take!] are woken up is not guaranteed.
+
+If a thread is blocked on a call to @racket[mvar-peek], the call is guaranteed to complete the next time the M-var is @tech[#:key "full"]{filled}, even if another thread is blocked on a call to @racket[mvar-take!] on the same M-var. In other words, whenever @racket[mvar-peek] and @racket[mvar-take!] compete to read the next value of an @tech{empty} M-var, @racket[mvar-peek] always wins. Since @racket[mvar-peek] is not exclusive—that is, it does not preclude another thread from reading the same M-var after it completes—this preference for @racket[mvar-peek] ensures that the maximum number of threads are woken up each time an M-var is filled.
+
+@subsection[#:tag "safety"]{Safety}
+
+Being a concurrent data structure, @tech{M-vars} are naturally thread-safe. They are also @reftech{break}-safe: if a thread is interrupted via @racket[break-thread] while executing an M-var operation, either none or all of the operation’s effects will take place. In other words, the atomicity of M-var operations is never compromised by breaks.
+
+However, M-vars are @emph{not} kill-safe. If a thread is killed via @racket[kill-thread] while executing any M-var operation (including @racket[mvar-peek]), the operation’s effects may only partially complete, and the M-var may be permanently left in an invalid state. In a similar vein, if a thread is suspended via @racket[thread-suspend] while executing any M-var operation, the operation may only partially complete, and the M-var may become temporarily unusable until the thread is resumed.
+
+M-var operations also cannot safely be called in @tech[#:doc '(lib "scribblings/foreign/foreign.scrbl")]{atomic mode}. Even non-blocking operations like @racket[mvar-try-peek] may require polling events, which can lead to a deadlock if atomic mode is active.
 
 @section[#:tag "core-operations"]{Core Operations}
 

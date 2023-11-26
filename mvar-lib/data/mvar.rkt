@@ -19,6 +19,11 @@
           [mvar-empty? (-> mvar? boolean?)]
           [mvar-empty-evt (-> mvar? evt?)]
 
+          [mvar-swap! (->* [mvar? any/c] [#:enable-break? any/c] any/c)]
+          [mvar-update! (->* [mvar? (-> any/c any/c)] [#:enable-break? any/c] void?)]
+          [call-with-mvar (->* [mvar? (-> any/c any)] [#:enable-break? any/c] any)]
+          [call-with-mvar! (->* [mvar? (-> any/c any)] [#:enable-break? any/c] any)]
+
           [impersonate-mvar impersonate-mvar/c]
           [chaperone-mvar impersonate-mvar/c]
           [mvar/c (->* [contract?] [contract?] contract?)]))
@@ -26,7 +31,7 @@
 (define no-value (gensym 'no-value))
 
 ;; -----------------------------------------------------------------------------
-;; mvar
+;; core operations
 
 ;; An mvar is implemented as a mutable cell combined with two semaphores and a
 ;; channel. The semaphores are waited on by threads trying to take or put, and
@@ -177,6 +182,70 @@
   (if (procedure? fail)
       (fail)
       fail))
+
+;; -----------------------------------------------------------------------------
+;; derived operations
+
+(define (mvar-swap! mv new-val #:enable-break? [enable-break? #f])
+  (define breaks? (break-enabled))
+  (parameterize-break #f
+    (define old-val (mvar-take! mv #:enable-break? (or breaks? enable-break?)))
+    (mvar-put! mv new-val)
+    old-val))
+
+(define (call-with-mvar! mv proc #:enable-break? [enable-break? #f])
+  (define break-paramz (current-break-parameterization))
+  (define breaks? (break-enabled))
+  (parameterize-break #f
+    (define old-val (mvar-take! mv #:enable-break? (or breaks? enable-break?)))
+    (define new-val old-val)
+    (dynamic-wind
+     void
+     (λ ()
+       (call-with-continuation-barrier
+        (λ ()
+          (call-with-break-parameterization
+           break-paramz
+           (λ ()
+             (call-with-values
+              (λ () (proc old-val))
+              (case-lambda
+                [() (raise-arguments-error
+                     'call-with-mvar!
+                     "contract violation;\n given procedure returned wrong number of results"
+                     "expected" (unquoted-printing-string "at least 1")
+                     "received" 0
+                     "procedure" proc)]
+                [(val)
+                 (set! new-val val)
+                 (values)]
+                [(val result)
+                 (set! new-val val)
+                 (values result)]
+                [(val result1 result2)
+                 (set! new-val val)
+                 (values result1 result2)]
+                [(val . results)
+                 (set! new-val val)
+                 (apply values results)])))))))
+     (λ () (mvar-put! mv new-val)))))
+
+(define (mvar-update! mv proc #:enable-break? [enable-break? #f])
+  (call-with-mvar!
+   mv #:enable-break? enable-break?
+   (λ (val) (values (proc val) (void)))))
+
+(define (call-with-mvar mv proc #:enable-break? [enable-break? #f])
+  (call-with-mvar!
+   mv #:enable-break? enable-break?
+   (λ (val)
+     (call-with-values
+      (λ () (proc val))
+      (case-lambda
+        [() val]
+        [(result) (values val result)]
+        [(result1 result2) (values val result1 result2)]
+        [results (apply values val results)])))))
 
 ;; -----------------------------------------------------------------------------
 ;; chaperones and impersonators

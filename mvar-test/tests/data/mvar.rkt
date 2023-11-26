@@ -66,12 +66,56 @@
  (check-equal? (execute-one) 'dead)
  (check-equal? (execute-one) 'dead))
 
+(test-begin
+ "basic mvar-swap! usage"
+ (define mv (make-mvar 1))
+ (check-equal? (mvar-swap! mv 2) 1)
+ (check-equal? (mvar-swap! mv 3) 2)
+ (check-equal? (mvar-swap! mv 4) 3)
+ (check-equal? (mvar-try-peek mv) 4))
+
+(test-begin
+ "basic mvar-update! usage"
+ (define mv (make-mvar 1))
+ (check-equal? (mvar-try-peek mv) 1)
+ (mvar-update! mv add1)
+ (check-equal? (mvar-try-peek mv) 2)
+ (mvar-update! mv add1)
+ (check-equal? (mvar-try-peek mv) 3))
+
+(test-case
+ "mvar-update! restores the value on exceptions"
+ (define mv (make-mvar 1))
+ (check-exn exn:fail? (λ () (mvar-update! mv (λ () (error "bang")))))
+ (check-equal? (mvar-try-peek mv) 1))
+
+(test-case
+ "basic call-with-mvar usage"
+ (define mv (make-mvar 1))
+ (check-equal? (call-with-mvar mv (λ (val) (add1 val))) 2)
+ (check-equal? (mvar-try-peek mv) 1))
+
+(test-case
+ "multi-valued return from call-with-mvar"
+ (define mv (make-mvar 1))
+ (check-equal? (call-with-values (λ () (call-with-mvar mv (λ (val) (values)))) list)
+               '())
+ (check-equal? (call-with-values (λ () (call-with-mvar mv (λ (val) (values (add1 val) (sub1 val))))) list)
+               '(2 0))
+ (check-equal? (mvar-try-peek mv) 1))
+
+(test-case
+ "call-with-mvar! zero-valued return error message"
+ (check-exn #px"expected: at least 1\n  received: 0"
+            (λ () (call-with-mvar! (make-mvar 1) (λ (val) (values))))))
+
 (define ((exn?-blaming which) exn)
   (and (exn:fail:contract:blame? exn)
        (let ([b (exn:fail:contract:blame-object exn)])
          (equal? (blame-positive b) which))))
 
-(test-begin
+(test-case
+ "mvar/c blame"
  (define mv (make-mvar))
  (define mv+c (contract (mvar/c exact-integer?) mv 'pos 'neg))
  (check-equal? (mvar-put! mv+c 10) (void))

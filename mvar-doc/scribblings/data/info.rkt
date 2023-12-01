@@ -1,2 +1,2 @@
 #lang info
-(define scribblings '(["mvar.scrbl" ()]))
+(define scribblings '(["mvar.scrbl" () ("Data Structures")]))

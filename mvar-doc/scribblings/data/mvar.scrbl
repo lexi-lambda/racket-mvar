@@ -25,7 +25,7 @@
 
 @title{M-vars: Synchronized Boxes}
 @author{@author+email["Alexis King" "lexi.lambda@gmail.com"]}
-@margin-note{The source of this manual is available on @hyperlink["https://github.com/lexi-lambda/racket-mvar/blob/master/mvar-doc/scribblings/mvar.scrbl"]{GitHub.}}
+@margin-note{The source of this manual is available on @hyperlink["https://github.com/lexi-lambda/racket-mvar/blob/master/mvar-doc/scribblings/data/mvar.scrbl"]{GitHub.}}
 
 @defmodule[data/mvar]{
 

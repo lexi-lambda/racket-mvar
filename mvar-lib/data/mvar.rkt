@@ -296,7 +296,7 @@
     (apply wrap-proc mv struct:mvar props)))
 
 (define (impersonate-mvar mv #:get [get-proc #f] #:put [put-proc #f] . props)
-  (wrap-mvar impersonate-struct mv get-proc put-proc props))
+  (wrap-mvar impersonate-struct mv props #:get get-proc #:put put-proc))
 (define (chaperone-mvar mv #:get [get-proc #f] #:put [put-proc #f] . props)
   (define ((make-checked-chaperone-proc proc) a)
     (define b (proc a))

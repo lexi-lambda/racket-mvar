@@ -127,3 +127,26 @@
  (check-exn (exn?-blaming 'pos) (λ () (mvar-peek mv+c)))
  (check-exn (exn?-blaming 'pos) (λ () (mvar-take! mv+c)))
  (check-equal? (mvar-empty? mv+c) #t))
+
+(test-case
+ "mvar/c impersonator contract"
+
+ (define coerce-to-bool/c
+   (make-contract
+    #:late-neg-projection
+    (λ (blame)
+      (λ (val neg-party)
+        (and val #t)))))
+
+ (define mv (contract (mvar/c coerce-to-bool/c boolean?)
+                      (make-mvar)
+                      'pos
+                      'neg))
+
+ (check-equal? (mvar-put! mv 'ok) (void))
+ (check-equal? (mvar-peek mv) #t)
+ (check-equal? (mvar-take! mv) #t)
+
+ (check-equal? (mvar-put! mv #f) (void))
+ (check-equal? (mvar-peek mv) #f)
+ (check-equal? (mvar-take! mv) #f))
